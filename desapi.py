@@ -190,7 +190,7 @@ def start_attack():
         return jsonify({'error': 'Invalid parameters'}), 400
     
     # Validate method
-    allowed_methods = ['udp', 'tcp', 'syn', 'http', 'dns']
+    allowed_methods = ['udp-big', 'udp-pps', 'samp', 'raknet',]
     if method.lower() not in allowed_methods:
         return jsonify({'error': f'Invalid method. Allowed: {allowed_methods}'}), 400
     
